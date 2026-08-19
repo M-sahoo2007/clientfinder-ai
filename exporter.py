@@ -17,6 +17,14 @@ COLUMNS = [
     "Reviews",
     "Online Presence",
     "Website",
+
+    "Website Status",
+    "HTTP Status",
+    "HTTPS",
+    "Response Time",
+    "Final URL",
+    "Website Error",
+
     "Lead Score",
     "Priority",
     "Recommended Service",

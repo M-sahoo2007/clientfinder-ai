@@ -1,6 +1,7 @@
 from places import search_places
 from analyzer import analyze_business
 from exporter import export_to_csv
+from website_checker import check_website
 
 
 def main():
@@ -46,13 +47,28 @@ def main():
         )
         return
 
+    print(
+        f"Places returned: {len(places)}"
+    )
+
     leads = []
 
     # --------------------------------
     # Analyze businesses
     # --------------------------------
 
-    for place in places:
+    for index, place in enumerate(
+        places,
+        start=1
+    ):
+
+        print(
+            f"\nAnalyzing {index}/{len(places)}..."
+        )
+
+        # --------------------------------
+        # Basic lead analysis
+        # --------------------------------
 
         lead = analyze_business(
             place
@@ -88,6 +104,44 @@ def main():
             "googleMapsUri",
             "N/A"
         )
+
+        # --------------------------------
+        # Website verification
+        # --------------------------------
+
+        if (
+            lead["Online Presence"]
+            == "BUSINESS_WEBSITE"
+        ):
+
+            print(
+                f"Checking website: "
+                f"{lead['Website']}"
+            )
+
+            website_result = check_website(
+                lead["Website"]
+            )
+
+            lead.update(
+                website_result
+            )
+
+        else:
+
+            # Website is either:
+            # - missing
+            # - social media
+            # - third-party platform
+
+            lead.update({
+                "Website Status": "NOT_CHECKED",
+                "HTTP Status": "",
+                "HTTPS": "",
+                "Response Time": "",
+                "Final URL": "",
+                "Website Error": "",
+            })
 
         leads.append(
             lead
@@ -148,6 +202,38 @@ def main():
         )
 
         print(
+            "Website Status :",
+            lead["Website Status"]
+        )
+
+        print(
+            "HTTP Status    :",
+            lead["HTTP Status"]
+        )
+
+        print(
+            "HTTPS          :",
+            lead["HTTPS"]
+        )
+
+        print(
+            "Response Time  :",
+            lead["Response Time"]
+        )
+
+        print(
+            "Final URL      :",
+            lead["Final URL"]
+        )
+
+        if lead["Website Error"]:
+
+            print(
+                "Website Error  :",
+                lead["Website Error"]
+            )
+
+        print(
             "Lead Score     :",
             lead["Lead Score"]
         )
@@ -173,6 +259,10 @@ def main():
 
     export_to_csv(
         leads
+    )
+
+    print(
+        "\nLead search completed successfully."
     )
 
 
