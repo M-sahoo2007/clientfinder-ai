@@ -51,9 +51,9 @@ def search_places(category, location, max_results=20):
         print("======================================")
         return []
 
-    print("\n========== GOOGLE RAW RESPONSE ==========")
-    print(response.text)
-    print("==========================================")
+    # print("\n========== GOOGLE RAW RESPONSE ==========")
+    # print(response.text)
+    # print("==========================================")
 
     data = response.json()
 
