@@ -19,23 +19,77 @@ SOCIAL_DOMAINS = {
 }
 
 
+THIRD_PARTY_DOMAINS = {
+    "booking.com",
+    "www.booking.com",
+    "oyorooms.com",
+    "www.oyorooms.com",
+    "tripadvisor.com",
+    "www.tripadvisor.com",
+    "justdial.com",
+    "www.justdial.com",
+    "zomato.com",
+    "www.zomato.com",
+    "swiggy.com",
+    "www.swiggy.com",
+    "makemytrip.com",
+    "www.makemytrip.com",
+    "goibibo.com",
+    "www.goibibo.com",
+    "agoda.com",
+    "www.agoda.com",
+    "expedia.com",
+    "www.expedia.com",
+}
+
+
 def classify_online_presence(website_url):
     """
     Classify the URL returned by Google Places.
+
+    Returns:
+        NO_WEBSITE_LISTED
+        SOCIAL_MEDIA_ONLY
+        THIRD_PARTY_PLATFORM
+        BUSINESS_WEBSITE
+        UNKNOWN
     """
 
     if not website_url:
         return "NO_WEBSITE_LISTED"
 
     try:
-        parsed = urlparse(website_url.lower())
+        parsed = urlparse(
+            website_url.lower().strip()
+        )
+
         domain = parsed.netloc
 
-        # Remove port if present
+        # Remove port
         domain = domain.split(":")[0]
 
-        if domain in SOCIAL_DOMAINS:
+        # Remove accidental www.
+        clean_domain = domain.removeprefix("www.")
+
+        # Social media
+        if (
+            domain in SOCIAL_DOMAINS
+            or clean_domain in {
+                d.removeprefix("www.")
+                for d in SOCIAL_DOMAINS
+            }
+        ):
             return "SOCIAL_MEDIA_ONLY"
+
+        # Third-party platforms
+        if (
+            domain in THIRD_PARTY_DOMAINS
+            or clean_domain in {
+                d.removeprefix("www.")
+                for d in THIRD_PARTY_DOMAINS
+            }
+        ):
+            return "THIRD_PARTY_PLATFORM"
 
         return "BUSINESS_WEBSITE"
 
@@ -45,21 +99,47 @@ def classify_online_presence(website_url):
 
 def analyze_business(place):
 
+    # --------------------------------
+    # Basic information
+    # --------------------------------
+
+    place_id = place.get("id")
+
     name = place.get(
-        "displayName", {}
-    ).get("text", "Unknown")
+        "displayName",
+        {}
+    ).get(
+        "text",
+        "Unknown"
+    )
 
-    rating = place.get("rating", 0)
-    reviews = place.get("userRatingCount", 0)
-    website = place.get("websiteUri")
+    rating = place.get(
+        "rating",
+        0
+    )
 
-    online_presence = classify_online_presence(website)
+    reviews = place.get(
+        "userRatingCount",
+        0
+    )
+
+    website = place.get(
+        "websiteUri"
+    )
+
+    # --------------------------------
+    # Online presence
+    # --------------------------------
+
+    online_presence = classify_online_presence(
+        website
+    )
 
     score = 0
     reasons = []
 
     # --------------------------------
-    # Online presence
+    # Online presence scoring
     # --------------------------------
 
     if online_presence == "NO_WEBSITE_LISTED":
@@ -80,6 +160,18 @@ def analyze_business(place):
 
         reasons.append(
             "Social media listed instead of business website"
+        )
+
+        recommended_service = (
+            "Business Website + Local SEO"
+        )
+
+    elif online_presence == "THIRD_PARTY_PLATFORM":
+
+        score += 25
+
+        reasons.append(
+            "Third-party platform listed instead of business website"
         )
 
         recommended_service = (
@@ -109,47 +201,68 @@ def analyze_business(place):
         )
 
     # --------------------------------
-    # Review count
+    # Review score
     # --------------------------------
 
     if reviews >= 1000:
 
         score += 25
-        reasons.append("1000+ reviews")
+
+        reasons.append(
+            "1000+ reviews"
+        )
 
     elif reviews >= 500:
 
         score += 20
-        reasons.append("500+ reviews")
+
+        reasons.append(
+            "500+ reviews"
+        )
 
     elif reviews >= 200:
 
         score += 15
-        reasons.append("200+ reviews")
+
+        reasons.append(
+            "200+ reviews"
+        )
 
     elif reviews >= 100:
 
         score += 10
-        reasons.append("100+ reviews")
+
+        reasons.append(
+            "100+ reviews"
+        )
 
     # --------------------------------
-    # Rating
+    # Rating score
     # --------------------------------
 
     if rating >= 4.5:
 
         score += 15
-        reasons.append("Excellent rating")
+
+        reasons.append(
+            "Excellent rating"
+        )
 
     elif rating >= 4.0:
 
         score += 10
-        reasons.append("Good rating")
+
+        reasons.append(
+            "Good rating"
+        )
 
     elif rating >= 3.5:
 
         score += 5
-        reasons.append("Average rating")
+
+        reasons.append(
+            "Average rating"
+        )
 
     # --------------------------------
     # Priority
@@ -171,27 +284,23 @@ def analyze_business(place):
 
         priority = "LOW"
 
+    # --------------------------------
+    # Return lead
+    # --------------------------------
+
     return {
-
+        "Place ID": place_id,
         "Business Name": name,
-
         "Rating": rating,
-
         "Reviews": reviews,
-
         "Online Presence": online_presence,
-
         "Website": (
             website
             if website
             else "NO WEBSITE LISTED"
         ),
-
         "Lead Score": score,
-
         "Priority": priority,
-
         "Recommended Service": recommended_service,
-
-        "Reason": "; ".join(reasons)
+        "Reason": "; ".join(reasons),
     }
