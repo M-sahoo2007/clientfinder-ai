@@ -12,19 +12,29 @@ def calculate_opportunity_score(lead):
 
     3. Opportunity Score
        Combined score used for lead priority.
+
+    Priority:
+        80-100 -> HOT
+        60-79  -> HIGH
+        40-59  -> MEDIUM
+        0-39   -> LOW
     """
 
-    # --------------------------------
-    # Input data
-    # --------------------------------
+    # ========================================================
+    # INPUT DATA
+    # ========================================================
 
     try:
-        rating = float(lead.get("Rating") or 0)
+        rating = float(
+            lead.get("Rating") or 0
+        )
     except (ValueError, TypeError):
         rating = 0
 
     try:
-        reviews = int(lead.get("Reviews") or 0)
+        reviews = int(
+            lead.get("Reviews") or 0
+        )
     except (ValueError, TypeError):
         reviews = 0
 
@@ -48,15 +58,17 @@ def calculate_opportunity_score(lead):
         ""
     )
 
-    # --------------------------------
+    # ========================================================
     # BUSINESS SCORE
     # Maximum: 40
-    # --------------------------------
+    # ========================================================
 
     business_score = 0
     business_reasons = []
 
+    # --------------------------------------------------------
     # Reviews
+    # --------------------------------------------------------
 
     if reviews >= 1000:
 
@@ -90,7 +102,9 @@ def calculate_opportunity_score(lead):
             "100+ Google reviews"
         )
 
+    # --------------------------------------------------------
     # Rating
+    # --------------------------------------------------------
 
     if rating >= 4.5:
 
@@ -108,9 +122,14 @@ def calculate_opportunity_score(lead):
             "4.0+ rating"
         )
 
-    # Additional business strength
+    # --------------------------------------------------------
+    # Strong business signal
+    # --------------------------------------------------------
 
-    if rating >= 4.5 and reviews >= 500:
+    if (
+        rating >= 4.5
+        and reviews >= 500
+    ):
 
         business_score += 10
 
@@ -118,25 +137,27 @@ def calculate_opportunity_score(lead):
             "Strong rating with high review volume"
         )
 
-    # Make sure Business Score never exceeds 40
+    # Never exceed 40
 
     business_score = min(
         business_score,
         40
     )
 
-    # --------------------------------
+    # ========================================================
     # DIGITAL OPPORTUNITY SCORE
     # Maximum: 60
-    # --------------------------------
+    # ========================================================
 
     digital_score = 0
+
     digital_reasons = []
+
     services = []
 
-    # --------------------------------
+    # --------------------------------------------------------
     # No website
-    # --------------------------------
+    # --------------------------------------------------------
 
     if online_presence == "NO_WEBSITE_LISTED":
 
@@ -148,12 +169,12 @@ def calculate_opportunity_score(lead):
 
         services.extend([
             "Business Website",
-            "Local SEO"
+            "Local SEO",
         ])
 
-    # --------------------------------
+    # --------------------------------------------------------
     # Social media only
-    # --------------------------------
+    # --------------------------------------------------------
 
     elif online_presence == "SOCIAL_MEDIA_ONLY":
 
@@ -165,12 +186,12 @@ def calculate_opportunity_score(lead):
 
         services.extend([
             "Business Website",
-            "Local SEO"
+            "Local SEO",
         ])
 
-    # --------------------------------
+    # --------------------------------------------------------
     # Third-party platform
-    # --------------------------------
+    # --------------------------------------------------------
 
     elif online_presence == "THIRD_PARTY_PLATFORM":
 
@@ -182,12 +203,12 @@ def calculate_opportunity_score(lead):
 
         services.extend([
             "Business Website",
-            "Local SEO"
+            "Local SEO",
         ])
 
-    # --------------------------------
-    # Website problems
-    # --------------------------------
+    # ========================================================
+    # WEBSITE PROBLEMS
+    # ========================================================
 
     if website_status in {
         "CONNECTION_ERROR",
@@ -218,9 +239,9 @@ def calculate_opportunity_score(lead):
             "Website Repair"
         )
 
-    # --------------------------------
+    # ========================================================
     # HTTPS
-    # --------------------------------
+    # ========================================================
 
     if (
         website_status == "WORKING"
@@ -237,9 +258,9 @@ def calculate_opportunity_score(lead):
             "HTTPS / Website Security"
         )
 
-    # --------------------------------
-    # Website speed
-    # --------------------------------
+    # ========================================================
+    # WEBSITE SPEED
+    # ========================================================
 
     try:
 
@@ -273,23 +294,22 @@ def calculate_opportunity_score(lead):
 
     except (
         ValueError,
-        TypeError
+        TypeError,
     ):
 
         pass
 
-    # --------------------------------
-    # Cap digital score
-    # --------------------------------
+    # Never exceed 60
 
     digital_score = min(
         digital_score,
         60
     )
 
-    # --------------------------------
-    # Combined opportunity score
-    # --------------------------------
+    # ========================================================
+    # COMBINED OPPORTUNITY SCORE
+    # Maximum: 100
+    # ========================================================
 
     opportunity_score = (
         business_score
@@ -301,19 +321,26 @@ def calculate_opportunity_score(lead):
         100
     )
 
-    # --------------------------------
-    # Priority
-    # --------------------------------
+    # ========================================================
+    # OPPORTUNITY PRIORITY
+    # ========================================================
+    #
+    # 80-100 -> HOT
+    # 60-79  -> HIGH
+    # 40-59  -> MEDIUM
+    # 0-39   -> LOW
+    #
+    # ========================================================
 
     if opportunity_score >= 80:
 
         priority = "HOT"
 
-    elif opportunity_score >= 65:
+    elif opportunity_score >= 60:
 
         priority = "HIGH"
 
-    elif opportunity_score >= 45:
+    elif opportunity_score >= 40:
 
         priority = "MEDIUM"
 
@@ -321,9 +348,9 @@ def calculate_opportunity_score(lead):
 
         priority = "LOW"
 
-    # --------------------------------
-    # Remove duplicate services
-    # --------------------------------
+    # ========================================================
+    # REMOVE DUPLICATE SERVICES
+    # ========================================================
 
     services = list(
         dict.fromkeys(
@@ -331,9 +358,9 @@ def calculate_opportunity_score(lead):
         )
     )
 
-    # --------------------------------
-    # Default service
-    # --------------------------------
+    # ========================================================
+    # DEFAULT SERVICE
+    # ========================================================
 
     if services:
 
@@ -347,9 +374,9 @@ def calculate_opportunity_score(lead):
             "SEO / Digital Growth"
         )
 
-    # --------------------------------
-    # Combine reasons
-    # --------------------------------
+    # ========================================================
+    # COMBINE REASONS
+    # ========================================================
 
     all_reasons = (
         business_reasons
@@ -359,7 +386,9 @@ def calculate_opportunity_score(lead):
     if all_reasons:
 
         opportunity_reasons = (
-            "; ".join(all_reasons)
+            "; ".join(
+                all_reasons
+            )
         )
 
     else:
@@ -368,9 +397,9 @@ def calculate_opportunity_score(lead):
             "No major opportunity signals detected"
         )
 
-    # --------------------------------
-    # Return
-    # --------------------------------
+    # ========================================================
+    # RETURN
+    # ========================================================
 
     return {
 
@@ -382,7 +411,11 @@ def calculate_opportunity_score(lead):
 
         "Opportunity Priority": priority,
 
-        "Opportunity Services": recommended_service,
+        "Opportunity Services": (
+            recommended_service
+        ),
 
-        "Opportunity Reasons": opportunity_reasons,
+        "Opportunity Reasons": (
+            opportunity_reasons
+        ),
     }
