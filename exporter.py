@@ -15,9 +15,12 @@ COLUMNS = [
     "Address",
     "Rating",
     "Reviews",
+
+    # Online presence
     "Online Presence",
     "Website",
 
+    # Website verification
     "Website Status",
     "HTTP Status",
     "HTTPS",
@@ -25,28 +28,50 @@ COLUMNS = [
     "Final URL",
     "Website Error",
 
+    # Opportunity scoring
+    "Business Score",
+    "Digital Opportunity Score",
+    "Opportunity Score",
+    "Opportunity Priority",
+    "Opportunity Services",
+    "Opportunity Reasons",
+
+    # Original analysis
     "Lead Score",
     "Priority",
     "Recommended Service",
     "Reason",
+
+    # Google Maps
     "Google Maps",
+
+    # Database
     "Last Updated",
 ]
 
 
 def export_to_csv(leads, filename=CSV_FILE):
+    """
+    Save leads to the persistent CSV database.
+
+    Rules:
+    - Place ID is the unique business identifier.
+    - Existing businesses are replaced with the newest data.
+    - New businesses are appended.
+    - Duplicate Place IDs are removed.
+    - Database is sorted by Opportunity Score.
+    """
 
     if not leads:
         print("\nNo leads to save.")
         return
 
-    # ----------------------------------------
-    # New search results
-    # ----------------------------------------
+    # ========================================
+    # PREPARE NEW SEARCH RESULTS
+    # ========================================
 
     new_df = pd.DataFrame(leads)
 
-    # Make sure every expected column exists
     for column in COLUMNS:
 
         if column not in new_df.columns:
@@ -54,14 +79,15 @@ def export_to_csv(leads, filename=CSV_FILE):
 
     new_df = new_df[COLUMNS]
 
-    # Update timestamp
-    new_df["Last Updated"] = datetime.now().strftime(
+    current_time = datetime.now().strftime(
         "%Y-%m-%d %H:%M:%S"
     )
 
-    # ----------------------------------------
-    # Load existing database
-    # ----------------------------------------
+    new_df["Last Updated"] = current_time
+
+    # ========================================
+    # LOAD EXISTING DATABASE
+    # ========================================
 
     if os.path.exists(filename):
 
@@ -72,7 +98,12 @@ def export_to_csv(leads, filename=CSV_FILE):
                 dtype=str
             )
 
-        except Exception:
+        except Exception as error:
+
+            print(
+                "\nWarning: Could not read "
+                f"existing database: {error}"
+            )
 
             old_df = pd.DataFrame()
 
@@ -80,9 +111,9 @@ def export_to_csv(leads, filename=CSV_FILE):
 
         old_df = pd.DataFrame()
 
-    # ----------------------------------------
-    # Make sure old database has correct columns
-    # ----------------------------------------
+    # ========================================
+    # NORMALIZE OLD DATABASE
+    # ========================================
 
     if not old_df.empty:
 
@@ -93,13 +124,13 @@ def export_to_csv(leads, filename=CSV_FILE):
 
         old_df = old_df[COLUMNS]
 
-    # ----------------------------------------
-    # Merge old + new
-    # ----------------------------------------
+    # ========================================
+    # MERGE OLD + NEW
+    # ========================================
 
     if old_df.empty:
 
-        combined = new_df
+        combined = new_df.copy()
 
     else:
 
@@ -111,70 +142,144 @@ def export_to_csv(leads, filename=CSV_FILE):
             ignore_index=True
         )
 
-        # Remove empty Place IDs from duplicate logic
-        combined["Place ID"] = (
-            combined["Place ID"]
+    # ========================================
+    # CLEAN PLACE IDs
+    # ========================================
+
+    combined["Place ID"] = (
+        combined["Place ID"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    # ========================================
+    # REMOVE DUPLICATE BUSINESSES
+    # ========================================
+    #
+    # Place ID is our unique identifier.
+    #
+    # If the same Place ID appears twice:
+    #
+    # OLD DATA
+    #    ↓
+    # NEW DATA
+    #    ↓
+    # KEEP NEW DATA
+    #
+    # ========================================
+
+    has_place_id = (
+        combined["Place ID"] != ""
+    )
+
+    with_place_id = combined[
+        has_place_id
+    ].drop_duplicates(
+        subset=["Place ID"],
+        keep="last"
+    )
+
+    without_place_id = combined[
+        ~has_place_id
+    ]
+
+    combined = pd.concat(
+        [
+            with_place_id,
+            without_place_id
+        ],
+        ignore_index=True
+    )
+
+    # ========================================
+    # CLEAN NUMERIC COLUMNS
+    # ========================================
+
+    numeric_columns = [
+        "Rating",
+        "Reviews",
+        "Business Score",
+        "Digital Opportunity Score",
+        "Opportunity Score",
+        "Lead Score",
+    ]
+
+    for column in numeric_columns:
+
+        combined[column] = pd.to_numeric(
+            combined[column],
+            errors="coerce"
+        )
+
+    # ========================================
+    # CLEAN TEXT COLUMNS
+    # ========================================
+
+    text_columns = [
+        "Place ID",
+        "Business Name",
+        "Category",
+        "Location",
+        "Phone",
+        "Address",
+        "Online Presence",
+        "Website",
+        "Website Status",
+        "HTTP Status",
+        "HTTPS",
+        "Response Time",
+        "Final URL",
+        "Website Error",
+        "Opportunity Priority",
+        "Opportunity Services",
+        "Opportunity Reasons",
+        "Priority",
+        "Recommended Service",
+        "Reason",
+        "Google Maps",
+        "Last Updated",
+    ]
+
+    for column in text_columns:
+
+        combined[column] = (
+            combined[column]
             .fillna("")
             .astype(str)
             .str.strip()
         )
 
-        # Keep newest data for existing businesses
-        # combined = combined.drop_duplicates(
-        #     subset=["Place ID"],
-        #     keep="last"
-        # )
-        
-        has_place_id = combined["Place ID"].ne("")
-
-        with_id = combined[has_place_id].drop_duplicates(
-            subset=["Place ID"],
-           keep="last"
-        )
-
-        without_id = combined[~has_place_id]
-
-        combined = pd.concat(
-           [
-               with_id,
-              without_id
-          ],
-          ignore_index=True
-        )
-        
-
-    # ----------------------------------------
-    # Clean numeric fields
-    # ----------------------------------------
-
-    combined["Rating"] = pd.to_numeric(
-        combined["Rating"],
-        errors="coerce"
-    )
-
-    combined["Reviews"] = pd.to_numeric(
-        combined["Reviews"],
-        errors="coerce"
-    )
-
-    combined["Lead Score"] = pd.to_numeric(
-        combined["Lead Score"],
-        errors="coerce"
-    )
-
-    # ----------------------------------------
-    # Sort by Lead Score
-    # ----------------------------------------
+    # ========================================
+    # SORT DATABASE
+    # ========================================
+    #
+    # 1. Opportunity Score
+    # 2. Lead Score
+    #
+    # Highest-value opportunities appear first.
+    #
+    # ========================================
 
     combined = combined.sort_values(
-        by="Lead Score",
-        ascending=False,
+        by=[
+            "Opportunity Score",
+            "Lead Score"
+        ],
+        ascending=[
+            False,
+            False
+        ],
         na_position="last"
     )
 
-    # ----------------------------------------
-    # Save clean CSV
-    # ----------------------------------------
+    combined = combined.reset_index(
+        drop=True
+    )
+
+    # ========================================
+    # SAVE DATABASE
+    # ========================================
 
     combined.to_csv(
         filename,
@@ -182,21 +287,82 @@ def export_to_csv(leads, filename=CSV_FILE):
         encoding="utf-8-sig"
     )
 
-    # ----------------------------------------
-    # Statistics
-    # ----------------------------------------
+    # ========================================
+    # DATABASE STATISTICS
+    # ========================================
+
+    total_leads = len(combined)
+
+    priority_series = (
+        combined["Opportunity Priority"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    hot_count = (
+        priority_series == "HOT"
+    ).sum()
+
+    high_count = (
+        priority_series == "HIGH"
+    ).sum()
+
+    medium_count = (
+        priority_series == "MEDIUM"
+    ).sum()
+
+    low_count = (
+        priority_series == "LOW"
+    ).sum()
+
+    classified_count = (
+        hot_count
+        + high_count
+        + medium_count
+        + low_count
+    )
+
+    unclassified_count = (
+        total_leads
+        - classified_count
+    )
+
+    # ========================================
+    # DISPLAY DATABASE SUMMARY
+    # ========================================
 
     print("\n======================================")
     print("          LEAD DATABASE")
     print("======================================")
 
     print(
-        f"Total leads : {len(combined)}"
+        f"Total leads       : {total_leads}"
     )
 
     print(
-        f"Saved to    : {filename}"
+        f"HOT leads         : {hot_count}"
+    )
+
+    print(
+        f"HIGH leads        : {high_count}"
+    )
+
+    print(
+        f"MEDIUM leads      : {medium_count}"
+    )
+
+    print(
+        f"LOW leads         : {low_count}"
+    )
+
+    print(
+        f"Unclassified      : {unclassified_count}"
+    )
+
+    print(
+        f"Saved to          : {filename}"
     )
 
     print("======================================\n")
-

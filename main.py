@@ -2,6 +2,7 @@ from places import search_places
 from analyzer import analyze_business
 from exporter import export_to_csv
 from website_checker import check_website
+from scoring import calculate_opportunity_score
 
 
 def main():
@@ -143,6 +144,18 @@ def main():
                 "Website Error": "",
             })
 
+        # --------------------------------
+        # Opportunity scoring
+        # --------------------------------
+
+        opportunity = calculate_opportunity_score(
+            lead
+        )
+
+        lead.update(
+            opportunity
+        )
+
         leads.append(
             lead
         )
@@ -233,6 +246,10 @@ def main():
                 lead["Website Error"]
             )
 
+        # --------------------------------
+        # Original lead score
+        # --------------------------------
+
         print(
             "Lead Score     :",
             lead["Lead Score"]
@@ -253,6 +270,40 @@ def main():
             lead["Reason"]
         )
 
+        # --------------------------------
+        # Opportunity score
+        # --------------------------------
+
+        print(
+            "Business Score :",
+            lead["Business Score"]
+        )
+
+        print(
+            "Digital Opp.   :",
+            lead["Digital Opportunity Score"]
+        )
+
+        print(
+            "Opportunity    :",
+            lead["Opportunity Score"]
+        )
+
+        print(
+            "Opp. Priority  :",
+            lead["Opportunity Priority"]
+        )
+
+        print(
+            "Opp. Services  :",
+            lead["Opportunity Services"]
+        )
+
+        print(
+            "Opp. Reasons   :",
+            lead["Opportunity Reasons"]
+        )
+
     # --------------------------------
     # Save to persistent CSV database
     # --------------------------------
@@ -260,6 +311,20 @@ def main():
     export_to_csv(
         leads
     )
+
+    print("\n======================================")
+    print("          LEAD DATABASE")
+    print("======================================")
+
+    print(
+        f"Processed leads : {len(leads)}"
+    )
+
+    print(
+        "Saved to        : leads.csv"
+    )
+
+    print("======================================")
 
     print(
         "\nLead search completed successfully."
