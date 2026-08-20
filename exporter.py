@@ -12,10 +12,7 @@ CSV_FILE = "leads.csv"
 
 COLUMNS = [
 
-    # --------------------------------------------------------
     # Google Business Information
-    # --------------------------------------------------------
-
     "Place ID",
     "Business Name",
     "Category",
@@ -25,17 +22,11 @@ COLUMNS = [
     "Rating",
     "Reviews",
 
-    # --------------------------------------------------------
     # Online Presence
-    # --------------------------------------------------------
-
     "Online Presence",
     "Website",
 
-    # --------------------------------------------------------
     # Website Verification
-    # --------------------------------------------------------
-
     "Website Status",
     "HTTP Status",
     "HTTPS",
@@ -43,10 +34,7 @@ COLUMNS = [
     "Final URL",
     "Website Error",
 
-    # --------------------------------------------------------
     # Opportunity Scoring
-    # --------------------------------------------------------
-
     "Business Score",
     "Digital Opportunity Score",
     "Opportunity Score",
@@ -54,16 +42,10 @@ COLUMNS = [
     "Opportunity Services",
     "Opportunity Reasons",
 
-    # --------------------------------------------------------
     # Google Maps
-    # --------------------------------------------------------
-
     "Google Maps",
 
-    # --------------------------------------------------------
-    # Lead Management / CRM
-    # --------------------------------------------------------
-
+    # CRM
     "Lead Status",
     "Contacted",
     "Contact Date",
@@ -71,84 +53,369 @@ COLUMNS = [
     "Contact Method",
     "Notes",
 
-    # --------------------------------------------------------
     # Database
-    # --------------------------------------------------------
+    "Last Updated",
+]
 
+
+CRM_COLUMNS = [
+    "Lead Status",
+    "Contacted",
+    "Contact Date",
+    "Follow-up Date",
+    "Contact Method",
+    "Notes",
+]
+
+
+NUMERIC_COLUMNS = [
+    "Rating",
+    "Reviews",
+    "Business Score",
+    "Digital Opportunity Score",
+    "Opportunity Score",
+]
+
+
+TEXT_COLUMNS = [
+    "Place ID",
+    "Business Name",
+    "Category",
+    "Location",
+    "Phone",
+    "Address",
+    "Online Presence",
+    "Website",
+    "Website Status",
+    "HTTP Status",
+    "HTTPS",
+    "Response Time",
+    "Final URL",
+    "Website Error",
+    "Opportunity Priority",
+    "Opportunity Services",
+    "Opportunity Reasons",
+    "Google Maps",
+    "Lead Status",
+    "Contacted",
+    "Contact Date",
+    "Follow-up Date",
+    "Contact Method",
+    "Notes",
     "Last Updated",
 ]
 
 
 # ============================================================
-# EXPORT FUNCTION
+# HELPERS
 # ============================================================
 
-def export_to_csv(leads, filename=CSV_FILE):
+def normalize_dataframe(df):
+    """
+    Make sure a dataframe follows the official database schema.
+    """
+
+    if df is None or df.empty:
+        return pd.DataFrame(columns=COLUMNS)
+
+    df = df.copy()
+
+    # Add missing columns
+    for column in COLUMNS:
+        if column not in df.columns:
+            df[column] = ""
+
+    # Remove columns outside the official schema
+    df = df[COLUMNS]
+
+    return df
+
+
+def clean_dataframe(df):
+    """
+    Clean numeric and text fields.
+    """
+
+    df = df.copy()
+
+    # Numeric fields
+    for column in NUMERIC_COLUMNS:
+
+        df[column] = pd.to_numeric(
+            df[column],
+            errors="coerce"
+        )
+
+    # Text fields
+    for column in TEXT_COLUMNS:
+
+        df[column] = (
+            df[column]
+            .fillna("")
+            .astype(str)
+            .str.strip()
+        )
+
+    # Default CRM values
+    df["Lead Status"] = (
+        df["Lead Status"]
+        .replace("", "NEW")
+    )
+
+    df["Contacted"] = (
+        df["Contacted"]
+        .replace("", "NO")
+    )
+
+    return df
+
+
+def load_existing_database(filename):
+    """
+    Load the existing leads database.
+
+    Returns an empty dataframe if the database
+    does not exist or cannot be read.
+    """
+
+    if not os.path.exists(filename):
+        return pd.DataFrame(columns=COLUMNS)
+
+    try:
+
+        df = pd.read_csv(
+            filename,
+            dtype=str
+        )
+
+        return normalize_dataframe(df)
+
+    except Exception as error:
+
+        print(
+            "\nWarning: Could not read existing "
+            f"database: {error}"
+        )
+
+        return pd.DataFrame(columns=COLUMNS)
+
+
+def get_existing_crm_data(old_df):
+    """
+    Build a Place ID -> CRM information dictionary.
+
+    This allows us to update Google/website data
+    without destroying manually entered CRM data.
+    """
+
+    crm_data = {}
+
+    if old_df.empty:
+        return crm_data
+
+    for _, row in old_df.iterrows():
+
+        place_id = str(
+            row.get("Place ID", "")
+        ).strip()
+
+        if not place_id:
+            continue
+
+        crm_data[place_id] = {
+            column: str(
+                row.get(column, "")
+            ).strip()
+            for column in CRM_COLUMNS
+        }
+
+    return crm_data
+
+
+def preserve_crm_data(new_df, existing_crm):
+    """
+    Restore existing CRM information onto refreshed leads.
+    """
+
+    new_df = new_df.copy()
+
+    for index, row in new_df.iterrows():
+
+        place_id = str(
+            row.get("Place ID", "")
+        ).strip()
+
+        if not place_id:
+            continue
+
+        if place_id not in existing_crm:
+            continue
+
+        old_crm = existing_crm[place_id]
+
+        for column in CRM_COLUMNS:
+
+            old_value = old_crm.get(
+                column,
+                ""
+            )
+
+            if old_value:
+                new_df.at[
+                    index,
+                    column
+                ] = old_value
+
+    return new_df
+
+
+def remove_duplicates(df):
+    """
+    Remove duplicate businesses using Place ID.
+
+    The newest record wins.
+    """
+
+    df = df.copy()
+
+    df["Place ID"] = (
+        df["Place ID"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
+
+    has_place_id = (
+        df["Place ID"] != ""
+    )
+
+    with_place_id = df[
+        has_place_id
+    ].drop_duplicates(
+        subset=["Place ID"],
+        keep="last"
+    )
+
+    without_place_id = df[
+        ~has_place_id
+    ]
+
+    return pd.concat(
+        [
+            with_place_id,
+            without_place_id
+        ],
+        ignore_index=True
+    )
+
+
+def sort_database(df):
+    """
+    Sort highest-value opportunities first.
+    """
+
+    return df.sort_values(
+        by=[
+            "Opportunity Score",
+            "Business Score",
+        ],
+        ascending=[
+            False,
+            False,
+        ],
+        na_position="last"
+    ).reset_index(drop=True)
+
+
+# ============================================================
+# EXPORT DATABASE
+# ============================================================
+
+def export_to_csv(
+    leads,
+    filename=CSV_FILE
+):
     """
     Save leads to the persistent CSV database.
 
-    Database rules:
+    Rules:
 
     1. Place ID is the unique business identifier.
     2. Existing businesses are updated.
-    3. New businesses are added.
+    3. New businesses are appended.
     4. Duplicate Place IDs are removed.
-    5. Old scoring columns are removed.
-    6. Database is sorted by Opportunity Score.
-    7. CRM fields are preserved when an existing lead is updated.
+    5. Existing CRM information is preserved.
+    6. Latest Google/website/scoring data replaces old data.
+    7. Database is sorted by Opportunity Score.
     """
 
     if not leads:
 
-        print("\nNo leads to save.")
+        print(
+            "\nNo leads to save."
+        )
 
         return
 
     # ========================================================
-    # PREPARE NEW SEARCH RESULTS
+    # PREPARE NEW LEADS
     # ========================================================
 
     new_df = pd.DataFrame(leads)
 
-    # Make sure every database column exists
-
-    for column in COLUMNS:
-
-        if column not in new_df.columns:
-
-            new_df[column] = ""
-
-    # Keep only our official schema
-
-    new_df = new_df[COLUMNS]
+    new_df = normalize_dataframe(
+        new_df
+    )
 
     # ========================================================
     # DEFAULT CRM VALUES
     # ========================================================
 
-    if "Lead Status" not in new_df.columns:
+    new_df["Lead Status"] = (
+        new_df["Lead Status"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
 
-        new_df["Lead Status"] = "NEW"
+    new_df.loc[
+        new_df["Lead Status"] == "",
+        "Lead Status"
+    ] = "NEW"
 
-    else:
+    new_df["Contacted"] = (
+        new_df["Contacted"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+    )
 
-        new_df["Lead Status"] = (
-            new_df["Lead Status"]
-            .fillna("")
-            .replace("", "NEW")
-        )
+    new_df.loc[
+        new_df["Contacted"] == "",
+        "Contacted"
+    ] = "NO"
 
-    if "Contacted" not in new_df.columns:
+    # ========================================================
+    # LOAD OLD DATABASE
+    # ========================================================
 
-        new_df["Contacted"] = "NO"
+    old_df = load_existing_database(
+        filename
+    )
 
-    else:
+    # ========================================================
+    # SAVE EXISTING CRM INFORMATION
+    # ========================================================
 
-        new_df["Contacted"] = (
-            new_df["Contacted"]
-            .fillna("")
-            .replace("", "NO")
-        )
+    existing_crm = get_existing_crm_data(
+        old_df
+    )
+
+    # Apply old CRM fields to refreshed leads
+    new_df = preserve_crm_data(
+        new_df,
+        existing_crm
+    )
 
     # ========================================================
     # UPDATE TIMESTAMP
@@ -159,73 +426,6 @@ def export_to_csv(leads, filename=CSV_FILE):
     )
 
     new_df["Last Updated"] = current_time
-
-    # ========================================================
-    # LOAD EXISTING DATABASE
-    # ========================================================
-
-    if os.path.exists(filename):
-
-        try:
-
-            old_df = pd.read_csv(
-                filename,
-                dtype=str
-            )
-
-        except Exception as error:
-
-            print(
-                "\nWarning: Could not read existing "
-                f"database: {error}"
-            )
-
-            old_df = pd.DataFrame()
-
-    else:
-
-        old_df = pd.DataFrame()
-
-    # ========================================================
-    # NORMALIZE EXISTING DATABASE
-    # ========================================================
-
-    if not old_df.empty:
-
-        # ----------------------------------------------------
-        # Remove old scoring columns
-        # ----------------------------------------------------
-
-        old_columns_to_remove = [
-            "Lead Score",
-            "Priority",
-            "Recommended Service",
-            "Reason",
-        ]
-
-        for column in old_columns_to_remove:
-
-            if column in old_df.columns:
-
-                old_df = old_df.drop(
-                    columns=[column]
-                )
-
-        # ----------------------------------------------------
-        # Add missing new columns
-        # ----------------------------------------------------
-
-        for column in COLUMNS:
-
-            if column not in old_df.columns:
-
-                old_df[column] = ""
-
-        # ----------------------------------------------------
-        # Keep only official schema
-        # ----------------------------------------------------
-
-        old_df = old_df[COLUMNS]
 
     # ========================================================
     # MERGE OLD + NEW
@@ -240,264 +440,33 @@ def export_to_csv(leads, filename=CSV_FILE):
         combined = pd.concat(
             [
                 old_df,
-                new_df
+                new_df,
             ],
             ignore_index=True
         )
 
     # ========================================================
-    # CLEAN PLACE IDs
+    # REMOVE DUPLICATES
     # ========================================================
 
-    combined["Place ID"] = (
-        combined["Place ID"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
+    combined = remove_duplicates(
+        combined
     )
 
     # ========================================================
-    # PRESERVE CRM DATA
-    # ========================================================
-    #
-    # If a business already exists and we search again,
-    # Google data should update, BUT:
-    #
-    # Lead Status
-    # Contacted
-    # Contact Date
-    # Follow-up Date
-    # Contact Method
-    # Notes
-    #
-    # should NOT be accidentally erased.
-    #
+    # CLEAN DATA
     # ========================================================
 
-    crm_columns = [
-        "Lead Status",
-        "Contacted",
-        "Contact Date",
-        "Follow-up Date",
-        "Contact Method",
-        "Notes",
-    ]
-
-    # Build a dictionary of existing CRM information
-
-    existing_crm = {}
-
-    if not old_df.empty:
-
-        for _, row in old_df.iterrows():
-
-            place_id = str(
-                row.get("Place ID", "")
-            ).strip()
-
-            if not place_id:
-
-                continue
-
-            existing_crm[place_id] = {
-                column: str(
-                    row.get(column, "")
-                ).strip()
-                for column in crm_columns
-            }
-
-    # Apply old CRM information to new results
-
-    for index, row in new_df.iterrows():
-
-        place_id = str(
-            row.get("Place ID", "")
-        ).strip()
-
-        if place_id in existing_crm:
-
-            for column in crm_columns:
-
-                old_value = existing_crm[
-                    place_id
-                ].get(column, "")
-
-                if old_value:
-
-                    new_df.at[
-                        index,
-                        column
-                    ] = old_value
-
-    # Rebuild combined dataframe after CRM preservation
-
-    if old_df.empty:
-
-        combined = new_df.copy()
-
-    else:
-
-        combined = pd.concat(
-            [
-                old_df,
-                new_df
-            ],
-            ignore_index=True
-        )
-
-    # ========================================================
-    # REMOVE DUPLICATE BUSINESSES
-    # ========================================================
-    #
-    # Place ID is the unique key.
-    #
-    # Old record
-    #     ↓
-    # New record
-    #     ↓
-    # Keep newest Google/website/scoring data
-    #
-    # ========================================================
-
-    combined["Place ID"] = (
-        combined["Place ID"]
-        .fillna("")
-        .astype(str)
-        .str.strip()
-    )
-
-    has_place_id = (
-        combined["Place ID"] != ""
-    )
-
-    with_place_id = combined[
-        has_place_id
-    ].drop_duplicates(
-        subset=["Place ID"],
-        keep="last"
-    )
-
-    without_place_id = combined[
-        ~has_place_id
-    ]
-
-    combined = pd.concat(
-        [
-            with_place_id,
-            without_place_id
-        ],
-        ignore_index=True
-    )
-
-    # ========================================================
-    # CLEAN NUMERIC COLUMNS
-    # ========================================================
-
-    numeric_columns = [
-        "Rating",
-        "Reviews",
-        "Business Score",
-        "Digital Opportunity Score",
-        "Opportunity Score",
-    ]
-
-    for column in numeric_columns:
-
-        combined[column] = pd.to_numeric(
-            combined[column],
-            errors="coerce"
-        )
-
-    # ========================================================
-    # CLEAN TEXT COLUMNS
-    # ========================================================
-
-    text_columns = [
-
-        "Place ID",
-        "Business Name",
-        "Category",
-        "Location",
-        "Phone",
-        "Address",
-
-        "Online Presence",
-        "Website",
-
-        "Website Status",
-        "HTTP Status",
-        "HTTPS",
-        "Response Time",
-        "Final URL",
-        "Website Error",
-
-        "Opportunity Priority",
-        "Opportunity Services",
-        "Opportunity Reasons",
-
-        "Google Maps",
-
-        "Lead Status",
-        "Contacted",
-        "Contact Date",
-        "Follow-up Date",
-        "Contact Method",
-        "Notes",
-
-        "Last Updated",
-    ]
-
-    for column in text_columns:
-
-        combined[column] = (
-            combined[column]
-            .fillna("")
-            .astype(str)
-            .str.strip()
-        )
-
-    # ========================================================
-    # DEFAULT CRM VALUES FOR OLD RECORDS
-    # ========================================================
-
-    combined["Lead Status"] = (
-        combined["Lead Status"]
-        .replace("", "NEW")
-    )
-
-    combined["Contacted"] = (
-        combined["Contacted"]
-        .replace("", "NO")
+    combined = clean_dataframe(
+        combined
     )
 
     # ========================================================
     # SORT DATABASE
     # ========================================================
-    #
-    # Highest opportunity first.
-    #
-    # Primary:
-    #     Opportunity Score
-    #
-    # Secondary:
-    #     Business Score
-    #
-    # ========================================================
 
-    combined = combined.sort_values(
-        by=[
-            "Opportunity Score",
-            "Business Score"
-        ],
-        ascending=[
-            False,
-            False
-        ],
-        na_position="last"
-    )
-
-    combined = combined.reset_index(
-        drop=True
+    combined = sort_database(
+        combined
     )
 
     # ========================================================
@@ -514,11 +483,13 @@ def export_to_csv(leads, filename=CSV_FILE):
     # STATISTICS
     # ========================================================
 
-    total_leads = len(combined)
+    total_leads = len(
+        combined
+    )
 
-    # ----------------------------------------
-    # Opportunity priority
-    # ----------------------------------------
+    # --------------------------------------------------------
+    # Opportunity statistics
+    # --------------------------------------------------------
 
     priority_series = (
         combined["Opportunity Priority"]
@@ -544,19 +515,21 @@ def export_to_csv(leads, filename=CSV_FILE):
         priority_series == "LOW"
     ).sum()
 
-    unclassified_count = (
-        total_leads
-        - (
-            hot_count
-            + high_count
-            + medium_count
-            + low_count
-        )
+    classified_count = (
+        hot_count
+        + high_count
+        + medium_count
+        + low_count
     )
 
-    # ----------------------------------------
-    # Lead status
-    # ----------------------------------------
+    unclassified_count = (
+        total_leads
+        - classified_count
+    )
+
+    # --------------------------------------------------------
+    # Lead status statistics
+    # --------------------------------------------------------
 
     status_series = (
         combined["Lead Status"]
@@ -594,15 +567,25 @@ def export_to_csv(leads, filename=CSV_FILE):
     # DISPLAY DATABASE SUMMARY
     # ========================================================
 
-    print("\n======================================")
-    print("          LEAD DATABASE")
-    print("======================================")
+    print(
+        "\n======================================"
+    )
+
+    print(
+        "          LEAD DATABASE"
+    )
+
+    print(
+        "======================================"
+    )
 
     print(
         f"Total leads       : {total_leads}"
     )
 
-    print("\nOpportunity:")
+    print(
+        "\nOpportunity:"
+    )
 
     print(
         f"HOT leads         : {hot_count}"
@@ -624,7 +607,9 @@ def export_to_csv(leads, filename=CSV_FILE):
         f"Unclassified      : {unclassified_count}"
     )
 
-    print("\nLead Status:")
+    print(
+        "\nLead Status:"
+    )
 
     print(
         f"NEW               : {new_count}"
@@ -654,4 +639,6 @@ def export_to_csv(leads, filename=CSV_FILE):
         f"\nSaved to          : {filename}"
     )
 
-    print("======================================\n")
+    print(
+        "======================================\n"
+    )

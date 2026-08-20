@@ -12,9 +12,9 @@ def main():
     print("       Local Lead Finder")
     print("======================================\n")
 
-    # --------------------------------
-    # User input
-    # --------------------------------
+    # ========================================
+    # USER INPUT
+    # ========================================
 
     location = input(
         "Enter location: "
@@ -25,16 +25,18 @@ def main():
     ).strip()
 
     if not location or not category:
+
         print(
             "\nLocation and category are required."
         )
+
         return
 
     print("\nSearching businesses...\n")
 
-    # --------------------------------
-    # Google Places search
-    # --------------------------------
+    # ========================================
+    # GOOGLE PLACES SEARCH
+    # ========================================
 
     places = search_places(
         category=category,
@@ -43,9 +45,11 @@ def main():
     )
 
     if not places:
+
         print(
             "\nNo businesses found."
         )
+
         return
 
     print(
@@ -54,9 +58,9 @@ def main():
 
     leads = []
 
-    # --------------------------------
-    # Analyze businesses
-    # --------------------------------
+    # ========================================
+    # PROCESS EACH BUSINESS
+    # ========================================
 
     for index, place in enumerate(
         places,
@@ -67,25 +71,44 @@ def main():
             f"\nAnalyzing {index}/{len(places)}..."
         )
 
-        # --------------------------------
-        # Basic lead analysis
-        # --------------------------------
+        # ====================================
+        # BASIC BUSINESS ANALYSIS
+        # ====================================
 
-        lead = analyze_business(
-            place
+        try:
+
+            lead = analyze_business(
+                place
+            )
+
+        except Exception as error:
+
+            print(
+                f"Analysis failed: {error}"
+            )
+
+            continue
+
+        # ====================================
+        # PLACE ID
+        # ====================================
+
+        lead["Place ID"] = place.get(
+            "id",
+            ""
         )
 
-        # --------------------------------
-        # Search information
-        # --------------------------------
+        # ====================================
+        # SEARCH INFORMATION
+        # ====================================
 
         lead["Category"] = category
 
         lead["Location"] = location
 
-        # --------------------------------
-        # Contact information
-        # --------------------------------
+        # ====================================
+        # CONTACT INFORMATION
+        # ====================================
 
         lead["Phone"] = place.get(
             "nationalPhoneNumber",
@@ -97,43 +120,77 @@ def main():
             "N/A"
         )
 
-        # --------------------------------
-        # Google Maps
-        # --------------------------------
+        # ====================================
+        # GOOGLE MAPS
+        # ====================================
 
         lead["Google Maps"] = place.get(
             "googleMapsUri",
             "N/A"
         )
 
-        # --------------------------------
-        # Website verification
-        # --------------------------------
+        # ====================================
+        # WEBSITE VERIFICATION
+        # ====================================
+
+        online_presence = lead.get(
+            "Online Presence",
+            ""
+        )
+
+        website = lead.get(
+            "Website",
+            ""
+        )
 
         if (
-            lead["Online Presence"]
+            online_presence
             == "BUSINESS_WEBSITE"
+            and website
+            and website != "NO WEBSITE LISTED"
         ):
 
             print(
-                f"Checking website: "
-                f"{lead['Website']}"
+                f"Checking website: {website}"
             )
 
-            website_result = check_website(
-                lead["Website"]
-            )
+            try:
 
-            lead.update(
-                website_result
-            )
+                website_result = check_website(
+                    website
+                )
+
+                if website_result:
+
+                    lead.update(
+                        website_result
+                    )
+
+            except Exception as error:
+
+                print(
+                    f"Website check failed: {error}"
+                )
+
+                lead.update({
+                    "Website Status": "CHECK_FAILED",
+                    "HTTP Status": "",
+                    "HTTPS": "",
+                    "Response Time": "",
+                    "Final URL": "",
+                    "Website Error": str(error),
+                })
 
         else:
 
-            # Website is either:
-            # - missing
-            # - social media
-            # - third-party platform
+            # --------------------------------
+            # No own business website
+            #
+            # Possible cases:
+            # NO_WEBSITE_LISTED
+            # SOCIAL_MEDIA_ONLY
+            # THIRD_PARTY_PLATFORM
+            # --------------------------------
 
             lead.update({
                 "Website Status": "NOT_CHECKED",
@@ -144,25 +201,67 @@ def main():
                 "Website Error": "",
             })
 
-        # --------------------------------
-        # Opportunity scoring
-        # --------------------------------
+        # ====================================
+        # OPPORTUNITY SCORING
+        # ====================================
 
-        opportunity = calculate_opportunity_score(
-            lead
+        print(
+            "Calculating opportunity score..."
         )
 
-        lead.update(
-            opportunity
-        )
+        try:
+
+            opportunity = (
+                calculate_opportunity_score(
+                    lead
+                )
+            )
+
+            lead.update(
+                opportunity
+            )
+
+        except Exception as error:
+
+            print(
+                f"Opportunity scoring failed: {error}"
+            )
+
+            # Safe fallback
+            lead.update({
+                "Business Score": 0,
+                "Digital Opportunity Score": 0,
+                "Opportunity Score": 0,
+                "Opportunity Priority": "LOW",
+                "Opportunity Services": "Manual Review",
+                "Opportunity Reasons": (
+                    f"Scoring error: {error}"
+                ),
+            })
+
+        # ====================================
+        # ADD LEAD
+        # ====================================
 
         leads.append(
             lead
         )
 
-    # --------------------------------
-    # Display results
-    # --------------------------------
+    # ========================================
+    # CHECK RESULTS
+    # ========================================
+
+    if not leads:
+
+        print(
+            "\nNo leads could be processed."
+        )
+
+        return
+
+    # ========================================
+    # DISPLAY RESULTS
+    # ========================================
 
     print("\n======================================")
     print("           QUALIFIED LEADS")
@@ -176,152 +275,326 @@ def main():
 
         print(
             "Business       :",
-            lead["Business Name"]
+            lead.get(
+                "Business Name",
+                "Unknown"
+            )
+        )
+
+        print(
+            "Place ID       :",
+            lead.get(
+                "Place ID",
+                ""
+            )
         )
 
         print(
             "Category       :",
-            lead["Category"]
+            lead.get(
+                "Category",
+                ""
+            )
         )
 
         print(
             "Location       :",
-            lead["Location"]
+            lead.get(
+                "Location",
+                ""
+            )
         )
 
         print(
             "Phone          :",
-            lead["Phone"]
+            lead.get(
+                "Phone",
+                "N/A"
+            )
+        )
+
+        print(
+            "Address        :",
+            lead.get(
+                "Address",
+                "N/A"
+            )
         )
 
         print(
             "Rating         :",
-            lead["Rating"]
+            lead.get(
+                "Rating",
+                ""
+            )
         )
 
         print(
             "Reviews        :",
-            lead["Reviews"]
+            lead.get(
+                "Reviews",
+                ""
+            )
         )
+
+        # ====================================
+        # ONLINE PRESENCE
+        # ====================================
 
         print(
             "Online Presence:",
-            lead["Online Presence"]
+            lead.get(
+                "Online Presence",
+                ""
+            )
         )
 
         print(
             "Website        :",
-            lead["Website"]
+            lead.get(
+                "Website",
+                ""
+            )
         )
+
+        # ====================================
+        # WEBSITE CHECK
+        # ====================================
 
         print(
             "Website Status :",
-            lead["Website Status"]
+            lead.get(
+                "Website Status",
+                ""
+            )
         )
 
         print(
             "HTTP Status    :",
-            lead["HTTP Status"]
+            lead.get(
+                "HTTP Status",
+                ""
+            )
         )
 
         print(
             "HTTPS          :",
-            lead["HTTPS"]
+            lead.get(
+                "HTTPS",
+                ""
+            )
         )
 
         print(
             "Response Time  :",
-            lead["Response Time"]
+            lead.get(
+                "Response Time",
+                ""
+            )
         )
 
         print(
             "Final URL      :",
-            lead["Final URL"]
+            lead.get(
+                "Final URL",
+                ""
+            )
         )
 
-        if lead["Website Error"]:
+        website_error = lead.get(
+            "Website Error",
+            ""
+        )
+
+        if website_error:
 
             print(
                 "Website Error  :",
-                lead["Website Error"]
+                website_error
             )
 
-        # --------------------------------
-        # Original lead score
-        # --------------------------------
+        # ====================================
+        # ORIGINAL LEAD SCORE
+        # ====================================
 
         print(
             "Lead Score     :",
-            lead["Lead Score"]
+            lead.get(
+                "Lead Score",
+                ""
+            )
         )
 
         print(
             "Priority       :",
-            lead["Priority"]
+            lead.get(
+                "Priority",
+                ""
+            )
         )
 
         print(
             "Recommended    :",
-            lead["Recommended Service"]
+            lead.get(
+                "Recommended Service",
+                ""
+            )
         )
 
         print(
             "Reason         :",
-            lead["Reason"]
+            lead.get(
+                "Reason",
+                ""
+            )
         )
 
-        # --------------------------------
-        # Opportunity score
-        # --------------------------------
+        # ====================================
+        # OPPORTUNITY SCORE
+        # ====================================
 
         print(
             "Business Score :",
-            lead["Business Score"]
+            lead.get(
+                "Business Score",
+                ""
+            )
         )
 
         print(
             "Digital Opp.   :",
-            lead["Digital Opportunity Score"]
+            lead.get(
+                "Digital Opportunity Score",
+                ""
+            )
         )
 
         print(
             "Opportunity    :",
-            lead["Opportunity Score"]
+            lead.get(
+                "Opportunity Score",
+                ""
+            )
         )
 
         print(
             "Opp. Priority  :",
-            lead["Opportunity Priority"]
+            lead.get(
+                "Opportunity Priority",
+                ""
+            )
         )
 
         print(
             "Opp. Services  :",
-            lead["Opportunity Services"]
+            lead.get(
+                "Opportunity Services",
+                ""
+            )
         )
 
         print(
             "Opp. Reasons   :",
-            lead["Opportunity Reasons"]
+            lead.get(
+                "Opportunity Reasons",
+                ""
+            )
         )
 
-    # --------------------------------
-    # Save to persistent CSV database
-    # --------------------------------
+        print(
+            "Google Maps    :",
+            lead.get(
+                "Google Maps",
+                ""
+            )
+        )
 
-    export_to_csv(
-        leads
+    # ========================================
+    # SAVE DATABASE
+    # ========================================
+
+    print(
+        "\nSaving leads to database..."
     )
 
+    try:
+
+        export_to_csv(
+            leads
+        )
+
+    except Exception as error:
+
+        print(
+            "\nDatabase export failed:"
+        )
+
+        print(error)
+
+        return
+
+    # ========================================
+    # SEARCH STATISTICS
+    # ========================================
+
+    priorities = [
+        lead.get(
+            "Opportunity Priority",
+            ""
+        )
+        for lead in leads
+    ]
+
+    hot = priorities.count(
+        "HOT"
+    )
+
+    high = priorities.count(
+        "HIGH"
+    )
+
+    medium = priorities.count(
+        "MEDIUM"
+    )
+
+    low = priorities.count(
+        "LOW"
+    )
+
+    # ========================================
+    # FINAL SUMMARY
+    # ========================================
+
     print("\n======================================")
-    print("          LEAD DATABASE")
+    print("          SEARCH COMPLETED")
     print("======================================")
 
     print(
-        f"Processed leads : {len(leads)}"
+        f"Businesses found    : {len(places)}"
     )
 
     print(
-        "Saved to        : leads.csv"
+        f"Businesses processed: {len(leads)}"
+    )
+
+    print(
+        f"HOT opportunities   : {hot}"
+    )
+
+    print(
+        f"HIGH opportunities  : {high}"
+    )
+
+    print(
+        f"MEDIUM opportunities: {medium}"
+    )
+
+    print(
+        f"LOW opportunities   : {low}"
+    )
+
+    print(
+        "Database updated    : leads.csv"
     )
 
     print("======================================")
